@@ -1,0 +1,51 @@
+#dataload
+papers = []
+
+with open("data/arxiv-metadata-oai-snapshot.json", "r", encoding="utf-8") as f:
+    for i, line in enumerate(f):
+        if i >= 50000:
+        break
+        try:
+            papers.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+
+print(f"✅ Loaded {len(papers)} papers")
+
+
+#chunks creation
+chunks = []
+chunk_texts = []
+
+for paper in tqdm(papers[:50000], desc="Chunking papers"):
+    paper_id = paper.get("id", "unknown")
+    for section in ["title", "abstract", "comments"]:
+        text = paper.get(section)
+        if text:
+            combined = f"{section.title()}: {text.strip()}"
+            chunks.append({
+                "paper_id": paper_id,
+                "section": section,
+                "text": combined,
+                "authors": paper.get("authors", "")
+            })
+            chunk_texts.append(combined)
+
+print(f"Total text chunks created: {len(chunk_texts)}")
+
+
+#embedding and indexing
+# Load embedding model
+embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+print("Encoding chunks...")
+embeddings = embedding_model.encode(chunk_texts, convert_to_numpy=True, show_progress_bar=True)
+
+# Build and save FAISS index
+index = faiss.IndexFlatL2(embeddings.shape[1])
+index.add(embeddings)
+faiss.write_index(index, "faiss_index.index")
+np.save("chunks.json.npy", chunks)
+
+print("Index and chunks saved.")
+
